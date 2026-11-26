@@ -1,0 +1,254 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
+enum UserStatus {
+  ACTIVE
+  PENDING
+  BLOCKED
+  INACTIVE
+}
+
+enum SecurityEventType {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+  TOKEN_REFRESH
+  TOKEN_REVOKED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_COMPLETED
+  USER_CREATED
+  USER_BLOCKED
+  PERMISSION_DENIED
+  TENANT_CREATED
+}
+
+model Tenant {
+  id        String       @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String       @unique
+  status    TenantStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  companies      Company[]
+  users          User[]
+  roles          Role[]
+  sessions       RefreshSession[]
+  securityEvents SecurityEvent[]
+}
+
+model Company {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  legalName String
+  tradeName String?
+  taxId     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branches      Branch[]
+  userCompanies UserCompany[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId])
+}
+
+model Branch {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @db.Uuid
+  tenantId  String   @db.Uuid
+  name      String
+  taxId     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company      Company      @relation(fields: [companyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  userBranches UserBranch[]
+
+  @@unique([id, tenantId])
+  @@index([companyId])
+}
+
+model User {
+  id                  String     @id @default(uuid()) @db.Uuid
+  tenantId            String     @db.Uuid
+  name                String
+  email               String
+  passwordHash        String
+  status              UserStatus @default(ACTIVE)
+  emailVerifiedAt     DateTime?
+  failedLoginAttempts Int        @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+  passwordChangedAt   DateTime   @default(now())
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  companies      UserCompany[]
+  branches       UserBranch[]
+  roles          UserRole[]
+  sessions       RefreshSession[]
+  resetTokens    PasswordResetToken[]
+  securityEvents SecurityEvent[]
+
+  @@unique([tenantId, email])
+  @@unique([id, tenantId])
+  @@index([tenantId, status])
+}
+
+model UserCompany {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  companyId String   @db.Uuid
+  tenantId  String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  company Company @relation(fields: [companyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([companyId])
+  @@index([tenantId])
+}
+
+model UserBranch {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  branchId  String   @db.Uuid
+  tenantId  String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([userId, branchId])
+  @@index([branchId])
+  @@index([tenantId])
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  name        String
+  slug        String
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@unique([tenantId, slug])
+  @@unique([id, tenantId])
+  @@index([tenantId])
+}
+
+model Permission {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique
+  module      String
+  action      String
+  description String?
+  createdAt   DateTime @default(now())
+
+  roles RolePermission[]
+}
+
+model UserRole {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  roleId    String   @db.Uuid
+  tenantId  String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  role Role @relation(fields: [roleId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([roleId])
+  @@index([tenantId])
+}
+
+model RolePermission {
+  id           String   @id @default(uuid()) @db.Uuid
+  roleId       String   @db.Uuid
+  permissionId String   @db.Uuid
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model RefreshSession {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @db.Uuid
+  tenantId     String    @db.Uuid
+  tokenHash    String    @unique
+  familyId     String    @db.Uuid
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String?   @db.Uuid
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+
+  user   User   @relation(fields: [userId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([familyId])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, usedAt])
+  @@index([expiresAt])
+}
+
+model SecurityEvent {
+  id        String            @id @default(uuid()) @db.Uuid
+  tenantId  String?           @db.Uuid
+  userId    String?           @db.Uuid
+  type      SecurityEventType
+  ipAddress String?
+  userAgent String?
+  details   Json?
+  createdAt DateTime          @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user   User?   @relation(fields: [userId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@index([tenantId, createdAt])
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+}

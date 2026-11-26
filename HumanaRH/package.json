@@ -1,0 +1,38 @@
+{
+  "name": "humanarh",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev --workspace @humanarh/api",
+    "dev:web": "npm run dev --workspace @humanarh/web",
+    "build:api": "npm run build --workspace @humanarh/api",
+    "build:web": "npm run build --workspace @humanarh/web",
+    "db:generate": "npm run prisma:generate --workspace @humanarh/api",
+    "db:migrate": "npm run prisma:migrate --workspace @humanarh/api"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "prisma@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "prisma@7.10.1": true,
+    "@prisma/engines@7.10.1": true,
+    "argon2@0.45.2": true
+  },
+  "overrides": {
+    "next@15.5.29": {
+      "postcss": "8.5.33"
+    }
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "dotenv": "^18.0.10",
+    "prisma": "^7.10.1"
+  }
+}
